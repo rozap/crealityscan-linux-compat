@@ -54,7 +54,7 @@ def install(c):
     prefix.mkdir(exist_ok=True);log=logdir(c,'install')
     print('Installing into new prefix:',prefix,flush=True)
     code=wine(c,log,[winpath(c['installer']),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',r'/DIR=C:\Program Files\CrealityScan','/LOG='+winpath(log/'installer.log')],
-              extra={'LD_PRELOAD':'','WINEDLLOVERRIDES':'winemenubuilder.exe=d;opencl=b;mscoree,mshtml=d'},gpu=False,seconds=240)
+              extra={'LD_PRELOAD':'','WINEDLLOVERRIDES':'winemenubuilder.exe=d;opencl=b;mscoree,mshtml=d'},gpu=True,seconds=240)
     if code:raise RuntimeError('Installer failed; prefix/logs preserved')
     app=appdir(c);plugins=app/'CrealityScan_Data/Plugins/x86_64';sdk=plugins/'OrbbecSDK.dll'
     expect(sdk,LOCK['sdk_sha256'])
@@ -95,6 +95,11 @@ def prepare_exports(c):
 def launch(c,mode,smoke=False):
     if mode=='wifi' and not c.get('allow_host_network',False):
         raise RuntimeError('Wi-Fi requires explicit allow_host_network=true; read the weaker isolation boundary in SECURITY.md')
+    # Local change: calibration downloads the board's parameters, so USB mode may share the host network for one run.
+    usb_network=mode=='usb' and os.environ.get('CREALITY_USB_NETWORK')=='1'
+    if usb_network and not c.get('allow_host_network',False):
+        raise RuntimeError('CREALITY_USB_NETWORK=1 requires allow_host_network=true; read the weaker isolation boundary in SECURITY.md')
+    if usb_network:print('USB mode with host network (CREALITY_USB_NETWORK=1)',flush=True)
     dependencies(c);lock=owned(c);verify_install(c);log=logdir(c,'smoke'if smoke else mode);prepare_exports(c)
     e={};nodes=[];scanner_lock=None
     if mode=='usb' and not smoke:
@@ -102,7 +107,7 @@ def launch(c,mode,smoke=False):
         e,nodes,scanner_lock=prepare(c)
     if smoke:e['DXVK_HUD']='devinfo'
     code=wine(c,log,[winpath(appdir(c)/'CrealityScan.exe'),'-logFile',winpath(log/'Player.log')],
-              extra=e,devices=nodes,network=mode=='wifi' and not smoke,seconds=35 if smoke else 0,workdir=appdir(c),exports=True)
+              extra=e,devices=nodes,network=(mode=='wifi' or usb_network) and not smoke,seconds=35 if smoke else 0,workdir=appdir(c),exports=True)
     if smoke:
         player=stateio.read_text(log/'Player.log')if (log/'Player.log').exists()else ''
         success=code in (0,124) and any(s in player for s in ('HomeState','HomePanel')) and 'Direct3D' in player

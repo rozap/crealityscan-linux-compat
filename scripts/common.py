@@ -81,6 +81,8 @@ def environment(c,log,backend='disabled'):
     preload=[]
     if c['blue_laser_fix']:preload.append(str(RUNTIME_ROOT/'build/usb-opencl.so'));e['CREALITY_BLUE_LASER_FIX']='1'
     if c['device_memory_fix']:preload.append(str(RUNTIME_ROOT/'build/dgg-device-memory.so'));e['CREALITY_DGG_DEVICE_MEMORY']='1'
+    # Local change: the SDK ignores Mesa's Rusticl platform; see src/opencl/rusticl-vendor.c.
+    if e.get('RUSTICL_ENABLE'):preload.append(str(RUNTIME_ROOT/'build/rusticl-vendor.so'));e['CREALITY_RUSTICL_VENDOR_FIX']='1'
     if preload:e['LD_PRELOAD']=':'.join(preload)
     return e
 
@@ -108,7 +110,7 @@ def sandbox(c,log,e,*,display=None,gpu=True,network=False,devices=(),installer=F
     if network:
         # Separate network namespace is deliberately replaced only for Wi-Fi.
         cmd.remove('--unshare-net')
-        for name in ('hosts','resolv.conf'):
+        for name in ('hosts','resolv.conf','ssl'):
             p=Path('/etc')/name
             if p.exists():cmd+=['--ro-bind',str(p.resolve()),str(p)]
     if gpu:
